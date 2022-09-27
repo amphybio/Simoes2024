@@ -1,0 +1,7 @@
+/data/
+/fig/
+/out/
+*_cache/
+*_files/
+
+*.html

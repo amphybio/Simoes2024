@@ -1,0 +1,38 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, you can obtain one at https://mozilla.org/MPL/2.0/
+   -
+   - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
+
+---
+title: "Análise de Correlação"
+author: "Leonardo R. Gama - leonardo.gama@usp.br"
+date: "02/04/2021"
+output:
+  html_document:
+    toc: yes
+---
+<!--code_folding: hide-->
+<!--df_print: kable OR paged -->
+
+```{r setup, include=FALSE}
+# Carrega pacotes, intalando-os se necessário.
+pkgs <- c('magrittr', 'missMDA')
+not_installed <- !pkgs %in% rownames(installed.packages())
+if (any(not_installed)) install.packages(pkgs[not_installed])
+library(magrittr)  # pipe operator (%>%)
+library(corrplot)
+data('base')
+dat <- dat[[1]]
+groups <- groups[[1]]
+```
+
+```{r calculation, fig.dim=c(9,9)}
+# Todas as variáveis contra todas.
+corS_CC <- cor(dat[groups == 'CC', ], use='pairwise')
+corS_WSC <- cor(dat[groups == 'WSC', ], use='pairwise')
+corrplot(corS_CC, mar=c(0,0,2,0), tl.col='gray15',
+         title="Pairwise Spearman's Correlation (CC Group)")
+corrplot(corS_WSC, mar=c(0,0,2,0), tl.col='gray15',
+         title="Pairwise Spearman's Correlation (WSC Group)")
+```

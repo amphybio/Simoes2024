@@ -1,0 +1,86 @@
+---
+title: "t-Distributed Stochastic Neighbor Embedding"
+author: "Leonardo R. Gama - leonardo.gama@usp.br"
+#date: "13/04/2021"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: false
+    code_folding: hide
+    fig_width: 9
+---
+
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, you can obtain one at https://mozilla.org/MPL/2.0/
+   -
+   - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=FALSE, message=FALSE, warning=FALSE) #, echo=FALSE, results='hide')
+options(width=110)
+
+# Carrega pacotes, intalando-os se necessário.
+pkgs <- c('magrittr', 'tsne')
+not_installed <- !pkgs %in% rownames(installed.packages())
+if (any(not_installed)) install.packages(pkgs[not_installed])
+
+library(magrittr)       # pipe operator (%>%)
+library(tsne)
+
+# Carrega os dados.
+data('base')
+data('imputed')
+groups <- groups[[1]]
+dat <- dat[[1]]
+
+subset <- !rownames(dat) %in% c() #c('588A')
+```
+
+```{r plot-func}
+# First two PCA components + 2D t-distributed stochastic neighbor embedding.
+pca_tsne <- function(dat, ...) {
+    colors <- palette()[(groups == 'WSC') + 2L]
+    layout(matrix(1:2, nrow=1), height=c(1.15, 1.15), respect=TRUE)
+    pca <- prcomp(dat, scale=TRUE)
+    pc1 <- sprintf("PC1 (%.0f%% of σ²)", 100*pca$sdev[1]**2/sum(pca$sdev**2))
+    pc2 <- sprintf("PC2 (%.0f%% of σ²)", 100*pca$sdev[2]**2/sum(pca$sdev**2))
+    plot(pca$x, col=colors, pch=20, xlab=pc1, ylab=pc2, main="Principal Component Analysis")
+    #text(pca$x, labels=rownames(dat))
+    legend('bottomleft', c('cachexia', 'control'), fill=2:3)
+    xy <- tsne(dat_combined, perplexity=5, max_iter=1000, min_cost=1, ...)
+    plot(xy, col=colors, pch=20, main="t-SNE Dimensionality Reduction", xlab='', ylab='')
+    #text(xy, labels=rownames(dat))
+}
+```
+
+## Dados completos
+```{r complete}
+pca_tsne(dat_imputed[subset, ])
+```
+
+### Volumes cerebrais
+```{r complete-volumes}
+pca_tsne(dat_imputed[subset, volumes])
+```
+
+### Medidas antropo-bioquímicas
+```{r complete-atropobiochem}
+pca_tsne(dat_imputed[subset, antropobiochem])
+```
+
+## Dados combinados
+```{r combined}
+pca_tsne(dat_imputed[subset, ])
+```
+
+### Volumes cerebrais
+```{r combined-volumes}
+pca_tsne(dat_imputed[subset, 1:4])
+```
+
+### Medidas antropo-bioquímicas
+```{r combined-atropobiochem}
+pca_tsne(dat_imputed[subset, -1:-4])
+```

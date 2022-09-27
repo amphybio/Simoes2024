@@ -1,0 +1,384 @@
+---
+title: "Principal Component Analysis (PCA)"
+author: "Leonardo R. Gama - leonardo.gama@usp.br"
+date: "13/04/2021"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: 'hide'
+---
+
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, you can obtain one at https://mozilla.org/MPL/2.0/
+   -
+   - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE, fig.align='center') #, echo=FALSE, results='hide')
+#knitr::knit_hooks$set(webgl=rgl::hook_webgl)
+rgl::setupKnitr(autoprint=TRUE, FALSE, FALSE)
+options(width=110)
+
+# Carrega pacotes, intalando-os se necessário.
+pkgs <- c('corrplot', 'FactoMineR', 'magrittr', 'missMDA', 'pca3d', 'rgl')
+not_installed <- !pkgs %in% rownames(installed.packages())
+if (any(not_installed)) install.packages(pkgs[not_installed])
+
+library(magrittr)       # pipe operator (%>%)
+library(corrplot)       # correlation plot
+library(FactoMineR)     # PCA plots
+library(missMDA)        # PCA imputation
+library(pca3d)          # 3D PCA plots
+library(rgl)            # 3D graphics
+library(stats)          # screeplot
+
+# Carrega os dados.
+data('base')
+groups <- groups[[1]]
+dat <- dat[[1]]
+```
+
+## Imputação
+
+```{r estimate, results='hide', warning=FALSE, include=TRUE}
+if (file.exists(ncomp_file <- 'data/ncomp.RData')) {
+    load(ncomp_file)
+} else {
+    ncomp_loo <- estim_ncpPCA(dat, ncp.min=0, ncp.max=17, method.cv='loo')
+    ncomp_gcv <- estim_ncpPCA(dat, ncp.min=0, ncp.max=17, method.cv='gcv')
+    #ncomp_kfd <- estim_ncpPCA(dat, ncp.min=0, ncp.max=17, method.cv='Kfold')
+    save(ncomp_loo, ncomp_gcv, file=ncomp_file)  # ncomp_kfd
+}
+
+plot(ncomp_loo$criterion/max(ncomp_loo$criterion) ~ names(ncomp_loo$criterion),
+     type='l', ylim=0:1, col=2, xlab="number of dimensions", ylab="relative mean error")
+lines(ncomp_gcv$criterion/max(ncomp_gcv$criterion) ~ names(ncomp_gcv$criterion), col=3)
+#lines(ncomp_kfd$criterion/max(ncomp_kfd$criterion) ~ names(ncomp_kfd$criterion), col=4)
+legend('bottomleft', c("loo", "gcv"), fill=2:3)  #, "Kfold"
+```
+
+Fazemos a imputação das observações faltantes utilizando todas as 32 variáveis
+(as 16 de volume cerebral e as 16 de medidas atropobioquímicas).  A seguir,
+calculamos a Análise de Componente Principal (PCA) para os dados imputados.
+
+O primeiro gráfico a partir do resultado da PCA mostra o quanto cada uma das
+primeiras componentes principais captura da variação nos dados.  Aqui, a
+primeira componente (PC1) carrega informação equivalente a mais de 14 das
+variáveis originais.
+
+```{r imputate}
+ncomp <- 11
+imputed <- imputePCA(dat, ncomp)
+pca <- PCA(cbind(groups, as.data.frame(imputed$completeObs)), quali.sup=1, graph=FALSE)
+screeplot(prcomp(imputed$completeObs, scale=TRUE), type='lines', main="Components")
+```
+
+O gráfico abaixo mostra a posição de cada amostra de acordo com as duas
+primeiras componentes, as que contêm a maior parte da variação nos dados.
+
+```{r pca-ind, fig.width=9}
+plot(pca, habillage=1)
+```
+
+O próximo gráfico mostra como cada variável contribui para as duas primeiras
+componentes. Observamos que todos as medidas de volume cerebral se concentram
+na mesma região na projeção das componentes principais.
+
+```{r pca-var, fig.dim=c(8,8), warning=FALSE}
+plot(pca, choix='var')
+```
+
+```{r variance, fig.dim=c(9,9), include=TRUE}
+res.MIPCA <- MIPCA(dat, ncomp)
+par(mfcol=c(2, 2))
+plot(res.MIPCA, graph='classic') #, choice='ind.proc', axes=1:2
+```
+
+******
+
+## Volumes cerebrais
+
+Como observamos uma semelhança muito grande entre as variáveis de volumes
+cerebrais, fazemos a PCA apenas com elas. Encontramos que as duas primeiras
+componentes (de 16) explicam 88% da variação nos dados!
+
+```{r volumes}
+vol_pca <- PCA(cbind(groups, dat[, volumes]), quali.sup=1, graph=FALSE)
+summary(vol_pca)
+screeplot(prcomp(dat[, volumes], scale=TRUE), type='lines', main="Components")
+```
+```{r vol-pca-ind, fig.width=9, include=TRUE}
+plot(vol_pca, habillage=1)
+```
+
+Os volumes de núcleo caudado e da ínsula se diferenciam dos demais entretanto.
+
+```{r vol-pca-var, fig.dim=c(8,8)}
+plot(vol_pca, choix='var')
+```
+```{r vol-pca-var2, fig.dim=c(8,8), include=TRUE}
+plot(vol_pca, choix='var', axes=3:2)
+```
+
+Essas medidas têm alta correlação entre lados direito e esquerdo, o que nos
+permite combiná-las numa única variável derivada.
+
+```{r left-right, fig.width=9}
+par(mfrow=c(1, 2))
+plot(`Caudate_L (mL)` ~ `Caudate_R (mL)`, dat, col=as.factor(groups), pch=16)
+legend('topleft', c('WSC', 'CC'), col=1:2, pch=16)
+plot(`Insula_L (mL)` ~ `Insula_R (mL)`, dat, col=as.factor(groups), pch=16)
+legend('topleft', c('WSC', 'CC'), col=1:2, pch=16)
+```
+
+### Volumes cerebrais excluindo núcleo caudado e ínsula
+
+```{r vol-subset, include=TRUE}
+vol_subset <- grep('Caudate|Insula', volumes, invert=TRUE)
+subset_pca <- PCA(cbind(groups, dat[, vol_subset]), quali.sup=1, graph=FALSE)
+summary(subset_pca)
+```
+```{r vol-subset-pca-ind, fig.width=9, include=TRUE}
+plot(subset_pca, habillage=1)
+```
+```{r vol-subset-pca-var, fig.dim=c(8,8), include=TRUE}
+plot(subset_pca, choix='var')
+```
+
+Nesta figura, podemos ver como se projetam as demais medidas de volume nas
+componentes 2 e 3 da PCA realizada sem as variáveis da ísula e núcleo caudado.
+
+```{r vol-subset-pca-var2, fig.dim=c(8,8)}
+plot(subset_pca, choix='var', axes=3:2)
+```
+
+******
+
+## Medidas antropo-bioquímicas
+
+Também fazemos o PCA apenas para as medidas antropo-bioquímicas, que apresentam
+maior diversidade. A variação nos dados não é explicada por menos de 4
+componentes.
+
+```{r anthropo-biochem}
+ab_dat <- imputed$completeObs[, anthropobiochem]
+ab_pca <- PCA(cbind(groups, as.data.frame(ab_dat)), quali.sup=1, graph=FALSE)
+summary(ab_pca)
+screeplot(prcomp(ab_dat, scale=TRUE), type='lines', main="Components")
+```
+
+Sem as variáveis de volume cerebral, o panorama das projeções destas medidas
+fica muito mais claro.
+
+```{r ab-pca-ind, fig.width=9, include=TRUE}
+plot(ab_pca, habillage=1)
+```
+
+<a id="anthropo-biochem"></a>
+```{r ab-pca-var, fig.dim=c(8,8)}
+plot(ab_pca, choix='var')
+```
+```{r ab-pca-var2, fig.dim=c(8,8), include=TRUE}
+plot(ab_pca, choix='var', axes=3:2)
+```
+
+### Massa corporal _vs_ Perda de peso
+
+No PCA e no gráfico de correlações, vimos que as variáveis `Current BM` e
+`% Weight Loss` são muito semelhantes, com sinais opostos. Podemos escolher
+somente uma delas para simplificar os resultados perdendo pouca informação.
+
+```{r bm-vs-loss}
+bm_loss_pca <- PCA(ab_dat[, 1:2], graph=FALSE)
+summary(bm_loss_pca)
+plot(bm_loss_pca, choix='var')
+```
+
+### Medidas antropo-bioquímicas excluindo 'Current BM'
+
+O gráfico tridimensional abaixo, que não inclui a variável 'Current BM' na PCA,
+permite vizualizar a distribuição das projeções das 15 medidas restantes nas
+três principais componentes.
+
+```{r ab-pca3d-biplot, webgl=TRUE, cache=FALSE, fig.dim=c(7,7), rgl.margin=0, results='hide'}
+ab_prcomp <- prcomp(ab_dat[, -1], scale=TRUE)
+#par3d(windowRect=c(0, 0, 800, 800))
+pca3d(ab_prcomp, group=groups, biplot=TRUE, biplot.vars=1:ncol(ab_prcomp$x), show.plane=FALSE)
+rgl.viewpoint(zoom=0.6)
+#rgl.snapshot('fig/anthropo-biochem-3comps.png')
+```
+<!--![](fig/anthropo-biochem-3comps.png)-->
+
+******
+
+## Transformação dos dados: combinação de volumes e exclusão de peso atual
+
+Para as análises a partir deste ponto, combinamos as 16 variáveis de volume em
+só 4 variáveis derivadas da seguinte forma:
+
+ - Média de `Caudate_L` e `Caudate_R` como **`Caudate Mean`**
+ - Média de `Insula_L` e `Insula_R` como **`Insula Mean`**
+ - Duas componentes principais dos 12 volumes restantes como **`Brain Volumes PC1`**
+   e **`Brain Volumes PC2`**
+
+Também **excluímos** a medida `Current BM`, por ser redundante com a `% Weight
+Loss`. Após isso, recalculamos a imputação das observações faltantes.
+
+```{r combine, results='hide', warning=FALSE, include=TRUE}
+pc1 <- subset_pca$ind$coord[, 1]
+pc2 <- subset_pca$ind$coord[, 2]
+caudate <- (dat[['Caudate_L (mL)']] + dat[['Caudate_R (mL)']]) / 2
+insula <- (dat[['Insula_L (mL)']] + dat[['Insula_R (mL)']]) / 2
+
+comb_dat <- data.frame('Brain Volumes PC1'=pc1, 'Brain Volumes PC2'=pc2,
+                   'Caudate mean (mL)'=caudate, 'Insula mean (mL)'=insula,
+                   dat[, anthropobiochem[-1]], check.names=FALSE)
+
+# Imputation
+if (file.exists(ncomp_comb_file <- 'data/ncomp-combined.rds')) {
+    ncomp_est <- readRDS(ncomp_comb_file)
+} else {
+    ncomp_est <- estim_ncpPCA(comb_dat, method.cv='loo', ncp.min=0, ncp.max=10)
+    saveRDS(ncomp_est, ncomp_comb_file)
+}
+plot(names(ncomp_est$criterion), ncomp_est$criterion)
+```
+```{r comb-pca}
+ncomp <- 2
+comb_imputed <- imputePCA(comb_dat, ncomp)
+comb_prcomp <- prcomp(comb_imputed$completeObs, scale=TRUE)
+comb_pca <- PCA(cbind(groups, as.data.frame(comb_imputed$completeObs)), quali.sup=1, graph=FALSE)
+summary(comb_pca)
+```
+```{r comb-pca-scree}
+screeplot(comb_prcomp, type='lines', main="Components")
+```
+```{r comb-pca-ind, fig.width=9, include=TRUE}
+plot(comb_pca, habillage=1)
+```
+```{r comb-pca-var, fig.dim=c(8,8), include=TRUE}
+plot(comb_pca, choix='var')
+```
+```{r comb-pca3d-biplot, webgl=TRUE, cache=FALSE, fig.dim=c(7,7), rgl.margin=0, results='hide'}
+#par3d(windowRect=c(0, 0, 800, 800))
+pca3d(comb_prcomp, group=groups, biplot=TRUE, biplot.vars=1:ncol(comb_prcomp$x), show.plane=FALSE)
+rgl.viewpoint(zoom=0.6)
+#rgl.snapshot('fig/combined-3comps.png')
+```
+<!--![](fig/combined-3comps.png)-->
+
+******
+
+### Correlações {.tabset}
+
+Aqui, temos o gráfico de correlações das variáveis combinadas. O primeiro está
+na ordem original; o segundo, reordenado de acordo com os valores das
+correlações.
+
+#### Ordem original
+```{r comb-corrplot}
+comb_corr <- cor(comb_imputed$completeObs, method='spearman')
+corrplot::corrplot(comb_corr, diag=FALSE, tl.col='gray15')
+```
+
+#### Reordenado
+```{r comb-corrplot-reordered}
+corrplot::corrplot(comb_corr, diag=FALSE, order='AOE', tl.col='gray15')
+```
+
+### Imputação Múltipla {.tabset}
+
+Com a imputação múltipla, as observações faltantes são calculadas centenas de
+vezes e, como esse processo tem um componente aleatório, é possível ver o
+quanto as estimativas dos valores fazem a posição dos indivíduos variar no PCA.
+Isso nos dá uma dimensão do erro na imputação. Também podemos ver o quanto a
+contribuição de cada variável para as componentes principais varia no segundo
+gráfico.
+
+#### Variação nos indivíduos
+```{r comb-variance-ind, fig.dim=c(9,8)}
+comb_MIPCA <- MIPCA(comb_dat, ncomp)
+invisible(plot(comb_MIPCA, choice='ind.supp'))
+```
+
+#### Variação nas variáveis
+```{r comb-variance-var, fig.dim=c(9,8)}
+invisible(plot(comb_MIPCA, choice='var'))
+```
+
+```{r comb-supp, fig.width=9, include=TRUE}
+par(mfcol=c(1, 2))
+plot(comb_MIPCA, choice='ind.proc', graph='classic')
+plot(comb_MIPCA, choice='dim', graph='classic')
+```
+
+```{r save, include=FALSE}
+# Save imputed data for further analysis.
+dat_imputed <- imputed$completeObs
+dat_combined <- comb_imputed$completeObs
+save(dat_imputed, dat_combined, file='data/imputed.RData')
+```
+
+### Combinação de medidas antropo-bioquímicas {.tabset}
+
+Combinamos pares de variáveis muito próximas na [projeção da PCA das medidas
+antropo-bioquímicas](#anthropo-biochem), usando a primeira componente da PCA do
+par:
+
+ - IL1b e MCP1
+ - IL6 e IL10
+ - IL8 e IFNg
+ - IL13 e MIP1a
+
+```{r comb-ab}
+comb2 <- as.data.frame(comb_imputed$completeObs)
+
+il8_il10   <- PCA(comb2[, c('IL8',  'IL10')], graph=FALSE)
+ifng_mip1a <- PCA(comb2[, c('IFNg', 'MIP1a')], graph=FALSE)
+```
+
+#### IL8 / IL10
+```{r comb-ab-plot-1, fig.height=4, warning=FALSE}
+par(mfrow=c(1, 2))
+plot(il8_il10, choix='var', graph='classic')
+plot(IL8 ~ IL10, data=comb2)
+```
+
+#### IFNg / MIP1a
+```{r comb-ab-plot-2, fig.height=4, warning=FALSE}
+par(mfrow=c(1, 2))
+plot(ifng_mip1a, choix='var', graph='classic')
+plot(IFNg ~ MIP1a, data=comb2)
+```
+
+###
+```{r comb-ab-pca, fig.dim=c(8,8)}
+il8_il10 <- il8_il10$ind$coord[, 1]
+ifng_mip1a <- ifng_mip1a$ind$coord[, 1]
+
+comb2 <- comb2[, !names(comb2) %in% c('IL8', 'IL10', 'IFNg', 'MIP1a')]
+comb2[['IL8/IL10']] <- il8_il10
+comb2[['IFNg/MIP1a']] <- ifng_mip1a
+
+comb2_pca <- PCA(comb2, graph=FALSE)
+plot(comb2_pca, choix='var')
+```
+
+### Correlações (antropo-bioquímicas combinadas) {.tabset}
+
+#### Ordem original
+```{r comb2-corrplot}
+comb2_corr <- cor(comb2, method='spearman')
+corrplot::corrplot(comb2_corr, diag=FALSE, tl.col='gray15')
+```
+
+#### Reordenado
+```{r comb2-corrplot-reordered}
+corrplot::corrplot(comb2_corr, diag=FALSE, order='AOE', tl.col='gray15')
+```
+
+<style type="text/css">
+    pre code { white-space: pre; }
+</style>

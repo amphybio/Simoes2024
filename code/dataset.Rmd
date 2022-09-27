@@ -1,0 +1,160 @@
+---
+title: "Preparação e Inspeção dos Dados"
+author: "Leonardo R. Gama - leonardo.gama@usp.br"
+date: "01/04/2021"
+output:
+  html_document:
+    toc: true
+---
+
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, you can obtain one at https://mozilla.org/MPL/2.0/
+   -
+   - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
+
+```{r setup, include=FALSE}
+# Carrega pacotes, intalando-os se necessário.
+pkgs <- c('magrittr', 'readxl', 'VIM')
+not_installed <- !pkgs %in% rownames(installed.packages())
+if (any(not_installed)) install.packages(pkgs[not_installed])
+library(magrittr)  # pipe operator (%>%)
+source('utils.R')
+```
+
+## Leitura e formatação
+
+```{r input, warning=FALSE}
+excel_file <- 'data/CorrelacionesCerebro.xlsx'
+
+n_sheets <- 1
+data_sheet0 <- 1
+n_datasets <- n_sheets - data_sheet0 + 1
+
+#        A Sample identifier
+#     V:AK Brain regions volumes
+# AO,AQ:AV Clinical data
+#    AW:BE Citokines amounts
+#    BF:BR Hormones (purple heads)
+#    BS:BY Neuropeptides (red heads)
+xcols <- c("A,V:AK,AO,AQ:AV,AW:BE") #BF:BR,BS:BY  
+cols <- lapply(xcols, excel_cols)
+
+last_WSC_row <- c(13)
+last_CC_row <- c(23)
+
+# Carrega as páginas da planilha lidos na lista 'sheets' e as colunas
+# de interesse na lista 'dat'.
+sheets <- list()
+dat <- list()
+
+# Se todas as páginas estiverem bem formatadas, podemos ler as
+# 'n_datasets' páginas de uma vez.  Se for ler uma de cada vez, no
+# entanto, é possível escolher o intervalo de linhas e colunas a
+# ser lido da página com argumentos extras.  Aqui, por precaução,
+# lemos apenas os intervalos de colunas que contêm os dados de
+# interesse para evitar problemas.
+for (i in data_sheet0:n_datasets) {
+    last_row <- last_CC_row[i]
+    last_col <- tail(cols[[i]], 1)
+    cell_range <- readxl::cell_limits(lr=c(last_row, last_col))
+    sheets[[i]] <- readxl::read_excel(excel_file, sheet=i, range=cell_range, .name_repair='minimal')
+}
+
+# Esse pacote produz tabelas no formato "tibble", de outro pacote,
+# mas como não usamos as funcionalidades extras dele é melhor
+# converter para o formato de tabela básico do R para evitar
+# surpresas...
+sheets <- lapply(sheets, as.data.frame)
+
+# Descontamos a linha de cabeçalho.
+last_WSC_row <- last_WSC_row - 1
+last_CC_row <- last_CC_row - 1
+
+# Criamos os objetos que serão processados apenas com os dados
+# (colunas) de interesse.
+for (i in 1:n_datasets) {
+    dat[[i]] <- sheets[[i]][, cols[[i]][-1]]
+    rownames(dat[[i]]) <- sheets[[i]][, cols[[i]][1]]
+}
+
+# Corrige entrada incorreta, convertendo-a para NA.
+dat[[1]][['Tumour stage']] <- as.integer(dat[[1]][['Tumour stage']])
+
+# Renomeia variáveis de volume cerebral.
+anthropobiochem <- colnames(dat[[1]])[17:32]
+volumes <- c(
+    'Amydgala_L (mL)',
+    'Amydgala_R (mL)',
+    'Caudate_L (mL)',
+    'Caudate_R (mL)',
+    'Frontal Orbital SMIR_L (mL)',
+    'Frontal Orbital SMIR_R (mL)',
+    'Frontal SMIT_R (mL)',
+    'Insula_L (mL)',
+    'Insula_R (mL)',
+    'Occipital S_L (mL)',
+    'Occipital SMI_L (mL)',
+    'Putamen_L (mL)',
+    'Temporal SMI_L (mL)',
+    'Temporal SMI_R (mL)',
+    'Hypothalamus_L (mL)',
+    'Hypothalamus_R (mL)'
+)
+colnames(dat[[1]])[1:16] <- volumes
+```
+
+## Inspeção dos dados
+
+```{r inspect}
+str(dat[[1]])
+summary(dat[[1]])
+VIM::aggr(dat[[1]][, 17:32], numbers=TRUE, prop=FALSE, oma=c(9, 4.5, 1.5, 1))
+```
+
+_Volume variables are in the vertical axis and the other in the horizontal_
+```{r pairs, fig.dim=c(10,8)}
+pairs(dat[[1]], gap=0, horInd=1:16, verInd=1:16)
+pairs(dat[[1]], gap=0, horInd=17:32, verInd=17:32)
+```
+
+## Transformação log {.tabset}
+```{r log}
+# Log transformation of cytokines.
+old_dat <- dat[[1]]
+cytokines <- colnames(dat[[1]])[24:32]
+dat[[1]][, cytokines] <- log(dat[[1]][, cytokines])
+```
+
+### Log
+```{r log-pos, fig.dim=c(10,8), echo=FALSE}
+pairs(dat[[1]], gap=0, horInd=17:32, verInd=17:32)
+```
+
+### Linear
+```{r log-pre, fig.dim=c(10,8), echo=FALSE}
+pairs(old_dat, gap=0, horInd=17:32, verInd=17:32)
+```
+
+##
+```{r save}
+# Definição de algumas variáveis.
+groups <- list()
+for (i in 1:n_datasets) {
+    groups[[i]] <- ifelse(1:last_CC_row[i] > last_WSC_row[i], 'CC', 'WSC')
+}
+
+# Divide os datasets de acordo com os grupos.
+dat_by_group <- list()
+for (i in 1:n_datasets) {
+    WSC_rows <- 1:last_WSC_row[i]
+    dat_by_group[[i]] <- list(
+            WSC = dat[[i]][WSC_rows, ],
+            CC = dat[[i]][-WSC_rows, ]
+    )
+}
+
+# Por fim, podemos salvar as tabelas num formato interno do R para
+# acelerar o carregamento dos dados em execuções posteriores.
+save(n_datasets, dat, groups, dat_by_group, anthropobiochem, volumes, file='data/base.RData')
+```
