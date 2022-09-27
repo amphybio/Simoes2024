@@ -18,9 +18,14 @@ output:
    - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache=FALSE, message=FALSE, warning=FALSE) #, echo=FALSE, results='hide')
+library(knitr)
+library(rprojroot)
+opts_knit$set(root.dir=find_root(has_file('LICENSE.txt')))
+opts_chunk$set(cache=FALSE, message=FALSE, warning=FALSE) #, echo=FALSE, results='hide')
 options(width=110)
+```
 
+```{r import, include=FALSE}
 # Carrega pacotes, intalando-os se necessário.
 pkgs <- c('magrittr', 'tsne')
 not_installed <- !pkgs %in% rownames(installed.packages())

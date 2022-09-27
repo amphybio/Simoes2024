@@ -16,11 +16,16 @@ output:
    - Copyright 2020 Alexandre Ferreira Ramos - AMPhyBio Laboratory -->
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(cache=TRUE, fig.align='center') #, echo=FALSE, results='hide')
-#knitr::knit_hooks$set(webgl=rgl::hook_webgl)
+library(knitr)
+library(rprojroot)
+opts_knit$set(root.dir=find_root(has_file('LICENSE.txt')))
+opts_chunk$set(cache=TRUE, fig.align='center') #, echo=FALSE, results='hide')
+#knit_hooks$set(webgl=rgl::hook_webgl)
 rgl::setupKnitr(autoprint=TRUE, FALSE, FALSE)
 options(width=110)
+```
 
+```{r import, include=FALSE}
 # Carrega pacotes, intalando-os se necessário.
 pkgs <- c('corrplot', 'FactoMineR', 'magrittr', 'missMDA', 'pca3d', 'rgl')
 not_installed <- !pkgs %in% rownames(installed.packages())

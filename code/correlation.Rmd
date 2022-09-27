@@ -16,6 +16,12 @@ output:
 <!--df_print: kable OR paged -->
 
 ```{r setup, include=FALSE}
+library(knitr)
+library(rprojroot)
+opts_knit$set(root.dir=find_root(has_file('LICENSE.txt')))
+```
+
+```{r import, include=FALSE}
 # Carrega pacotes, intalando-os se necessário.
 pkgs <- c('magrittr', 'missMDA')
 not_installed <- !pkgs %in% rownames(installed.packages())
