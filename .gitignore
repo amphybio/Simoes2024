@@ -1,7 +1,9 @@
-/data/
+/data/*
+!/data/*.md5
 /fig/
 /out/
+
+# Rmarkdown
 *_cache/
 *_files/
-
 *.html
