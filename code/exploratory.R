@@ -21,8 +21,8 @@ n_sheets <- 1
 data_sheet0 <- 1
 
 xcols <- c(
-        "A,V:AK,AO,AQ:AV,AW:BE"#,BF:BR,BS:BY"  
-        # Brain regions volumes V:AK; 
+        "A,V:AK,AO,AQ:AV,AW:BE"#,BF:BR,BS:BY"
+        # Brain regions volumes V:AK;
         # Clinical data AO,AQ:AV
         # Citokines amounts AW:BE
         # Hormones (purple heads) BF:BR
